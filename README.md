@@ -31,7 +31,10 @@ A storyboarding app for comics. Catch ideas on your phone, then plan beats, sket
 - **Inbox**: every saved idea, newest first. Open one to view it, edit it, or delete it.
 - **Projects**: create, rename and delete comics. Each project has its own page size: US comic, Manga, Webtoon (vertical strip), Square, or Custom. On a wide screen the Inbox sits beside the project list.
 
-Until Drive sync arrives (Phase 2), everything is stored on the device it was made on.
+- **Backup** (top right on every screen): **Export** saves your projects and Inbox ideas, with photos, to one file (`krak-backup-<date>.json`). **Import** adds the items from a backup file that aren't on the device yet; nothing already there is replaced or deleted. Unsaved Capture work isn't included.
+- If the browser won't let KRAK! save (for example a private window), a red notice says so at the top and saves only last until the tab closes.
+
+Until Drive sync arrives (Phase 2), everything is stored on the device it was made on. Export a backup now and then.
 
 ## Notes for development
 

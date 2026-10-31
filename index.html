@@ -124,6 +124,8 @@ dialog::backdrop{background:rgba(10,8,6,.55)}
 .size b{display:block; font-size:14px}
 .size span{font-size:12px; color:var(--muted)}
 
+.warn{margin-bottom:12px; padding:10px 12px; border:1px solid var(--danger); border-radius:8px; background:var(--accent-soft); font-size:14px}
+
 .toast{position:fixed; left:50%; bottom:84px; transform:translateX(-50%); background:var(--ink); color:var(--bg); padding:9px 16px; border-radius:20px; font-weight:600; z-index:50; pointer-events:none}
 </style>
 </head>
@@ -133,6 +135,7 @@ dialog::backdrop{background:rgba(10,8,6,.55)}
     <h1 class="brand">KRAK<span>!</span></h1>
     <div class="row" id="topActions"></div>
   </header>
+  <div class="warn" id="storageWarn" role="alert" hidden><b>This browser isn't letting KRAK! save.</b> Your work is kept only until this tab closes. To keep it, use <b>Backup → Export</b>, or open KRAK! in a normal (not private) window.</div>
   <main id="main"></main>
 </div>
 <nav class="nav" id="nav" aria-label="Sections"></nav>

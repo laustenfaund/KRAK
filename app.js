@@ -187,6 +187,7 @@ function render() {
   else if (S.view === "inbox") main.replaceChildren(viewInbox());
   else if (S.view === "project") main.replaceChildren(viewProject());
   else main.replaceChildren(viewProjects());
+  $("#topActions").append(h("button", { class: "btn ghost", onclick: backupDialog }, "Backup"));
   window.scrollTo(0, 0);
 }
 
@@ -321,7 +322,7 @@ function viewCapture() {
       await saveInbox();
       const wasEdit = !!d.editingId;
       await resetDraft();
-      toast(wasEdit ? "Saved" : "Saved to Inbox");
+      toast(DB.mem ? "Saved until this tab closes" : wasEdit ? "Saved" : "Saved to Inbox");
       if (wasEdit) go("#inbox"); else render();
     } catch (e) { saveB.disabled = false; toast("Couldn't save. Try again."); }
   }
@@ -475,9 +476,85 @@ function viewProject() {
     soon("Pages", "Panels arranged on pages, from grids or freeform shapes. Coming in Phase 5."));
 }
 
+/* ---------- backup (export / import) ---------- */
+/* One JSON file: projects, Inbox ideas, and their photos as data URLs. Thumbnails are rebuilt on import. */
+const blobToData = b => new Promise((res, rej) => { const r = new FileReader(); r.onload = () => res(r.result); r.onerror = () => rej(r.error); r.readAsDataURL(b); });
+async function exportBackup() {
+  const photos = {};
+  for (const it of S.inbox) if (it.hasPhoto) { const b = await DB.get("blobs", "photo:" + it.id); if (b) photos[it.id] = await blobToData(b); }
+  const data = { app: "krak", format: 1, exported: Date.now(), projects: S.projects, inbox: S.inbox, photos };
+  const url = URL.createObjectURL(new Blob([JSON.stringify(data)], { type: "application/json" }));
+  const a = h("a", { href: url, download: `krak-backup-${new Date().toISOString().slice(0, 10)}.json` });
+  document.body.append(a); a.click(); a.remove();
+  setTimeout(() => URL.revokeObjectURL(url), 60000);
+  await DB.put("kv", "lastExport", data.exported);
+}
+/* A backup file comes from outside the app, so only known fields with the right types are kept. */
+const num = (v, a, b) => typeof v === "number" && isFinite(v) && v >= a && v <= b;
+function cleanProject(p) {
+  if (!p || typeof p.id !== "string" || !p.size || !num(p.size.w, 1, 5000) || !num(p.size.h, 1, 5000)) return null;
+  const s = p.size, preset = SIZES.some(x => x.preset === s.preset) ? s.preset : "custom";
+  return { id: p.id, name: String(p.name || "Untitled comic").slice(0, 80), size: { preset, w: s.w, h: s.h, unit: s.unit === "px" ? "px" : "in" },
+    created: +p.created || Date.now(), updated: +p.updated || Date.now() };
+}
+function cleanItem(it) {
+  if (!it || typeof it.id !== "string" || !num(it.w, 1, 20000) || !num(it.h, 1, 20000) || !Array.isArray(it.strokes)) return null;
+  const strokes = it.strokes.filter(st => st && typeof st.c === "string" && num(st.s, 0, 100) && Array.isArray(st.p))
+    .map(st => ({ c: st.c, s: st.s, e: st.e ? true : undefined, p: st.p.filter(q => Array.isArray(q) && q.length === 3 && q.every(n => typeof n === "number" && isFinite(n))) }));
+  return { id: it.id, created: +it.created || Date.now(), updated: +it.updated || Date.now(), text: String(it.text || ""), w: it.w, h: it.h,
+    strokes, hasSketch: strokes.length > 0, hasPhoto: false };
+}
+/* Adds what the device doesn't have yet. Nothing already here is replaced or deleted. */
+async function importBackup(file) {
+  let data = null;
+  try { data = JSON.parse(await file.text()); } catch (e) {}
+  if (!data || data.app !== "krak" || !Array.isArray(data.projects) || !Array.isArray(data.inbox)) { toast("That isn't a KRAK! backup file."); return; }
+  const haveP = new Set(S.projects.map(p => p.id)), haveI = new Set(S.inbox.map(i => i.id));
+  let np = 0, ni = 0;
+  try {
+    for (const raw of data.projects) { const p = cleanProject(raw); if (p && !haveP.has(p.id)) { S.projects.push(p); haveP.add(p.id); np++; } }
+    for (const raw of data.inbox) {
+      const it = cleanItem(raw); if (!it || haveI.has(it.id)) continue;
+      const src = data.photos && data.photos[it.id];
+      if (typeof src === "string" && src.startsWith("data:image/")) {
+        try { await DB.put("blobs", "photo:" + it.id, await (await fetch(src)).blob()); it.hasPhoto = true; } catch (e) {}
+      }
+      if (it.hasSketch || it.hasPhoto) {
+        try { await DB.put("blobs", "thumb:" + it.id, await canvasBlob(await renderItem(it, Math.min(1, 480 / it.w)), "image/jpeg", 0.85)); } catch (e) {}
+      }
+      S.inbox.push(it); haveI.add(it.id); ni++;
+    }
+    S.inbox.sort((a, b) => b.created - a.created);
+    await saveProjects(); await saveInbox();
+  } catch (e) { toast("Couldn't finish the import. Try again."); render(); return; }
+  toast(np || ni ? `Added ${np} project${np === 1 ? "" : "s"} and ${ni} idea${ni === 1 ? "" : "s"}` : "Nothing new in that backup");
+  render();
+}
+async function backupDialog() {
+  const dlg = $("#dlg");
+  const last = await DB.get("kv", "lastExport");
+  const fileIn = h("input", { type: "file", accept: "application/json,.json", hidden: true, onchange: async () => {
+    const f = fileIn.files[0]; fileIn.value = ""; if (!f) return;
+    dlg.close(); await importBackup(f);
+  } });
+  const exportB = h("button", { class: "btn primary", onclick: async () => {
+    exportB.disabled = true;
+    try { await exportBackup(); dlg.close(); toast("Backup file saved"); } catch (e) { exportB.disabled = false; toast("Couldn't export. Try again."); }
+  } }, "Export");
+  dlg.onclose = null;
+  dlg.replaceChildren(h("div", { class: "dlg" },
+    h("div", { class: "row between" }, h("h2", null, "Backup"), h("button", { class: "btn ghost small", onclick: () => dlg.close() }, "Close")),
+    h("p", { class: "small muted", style: "margin:0" }, "KRAK! keeps everything in this browser only. Export saves your projects and Inbox ideas, with photos, to one file. Import adds the items from a backup file that aren't on this device yet; nothing here is replaced or deleted. Unsaved Capture work isn't included."),
+    h("p", { class: "small", style: "margin:0" }, "Last export from this device: " + (last ? fmtDate(last) + " · " + fmtTime(last) : "never")),
+    fileIn,
+    h("div", { class: "row end" }, h("button", { class: "btn", onclick: () => fileIn.click() }, "Import…"), exportB)));
+  dlg.showModal();
+}
+
 /* ---------- start ---------- */
 (async function start() {
   await DB.open();
+  $("#storageWarn").hidden = !DB.mem;
   S.projects = (await DB.get("kv", "projects")) || [];
   S.inbox = (await DB.get("kv", "inbox")) || [];
   S.draft = (await DB.get("kv", "draft")) || newDraft();
