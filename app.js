@@ -367,7 +367,7 @@ function inboxGrid() {
 }
 function viewInbox() {
   return h("section", { class: "stack", "aria-label": "Inbox" },
-    h("div", { class: "row between" }, h("h2", null, "Inbox"), h("span", { class: "small muted" }, "Sort ideas into projects on the Chromebook (coming in a later phase)")),
+    h("div", { class: "row between" }, h("h2", null, "Inbox"), h("span", { class: "small muted" }, "Sorting ideas into projects is coming in a later phase")),
     inboxGrid());
 }
 async function openItem(it) {

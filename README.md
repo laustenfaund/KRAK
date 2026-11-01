@@ -1,13 +1,13 @@
 # KRAK!
 
-A storyboarding app for comics. Catch ideas on your phone, then plan beats, sketch panels and lay out pages on a Chromebook or laptop. It runs in the browser, installs like an app, and works offline.
+A storyboarding app for comics: catch ideas, plan beats, sketch panels and lay out pages. It runs in the browser, installs like an app, and works offline. For now it's used on one Chromebook only; syncing between devices is set aside.
 
 ## Status
 
 | Phase | What | State |
 |---|---|---|
-| 1 | App shell, projects, phone capture, Inbox | **Done** |
-| 2 | Google Drive sync | Next |
+| 1 | App shell, projects, capture, Inbox | **Done** |
+| 2 | Google Drive sync | Set aside — one Chromebook for now |
 | 3 | Drawing engine: layers, perspective guides, snap | |
 | 4 | Beats and Panels views, sorting the Inbox | |
 | 5 | Pages: preset grids and freeform panels | |
@@ -22,7 +22,6 @@ A storyboarding app for comics. Catch ideas on your phone, then plan beats, sket
 
 ## Install it
 
-- **Phone:** open the address, then **Share → Add to Home Screen** (iPhone, Safari) or **Install app** (Android, Chrome).
 - **Chromebook:** open the address in Chrome, then click the install icon at the right end of the address bar.
 
 ## What's in Phase 1
@@ -34,7 +33,7 @@ A storyboarding app for comics. Catch ideas on your phone, then plan beats, sket
 - **Backup** (top right on every screen): **Export** saves your projects and Inbox ideas, with photos, to one file (`krak-backup-<date>.json`). **Import** adds the items from a backup file that aren't on the device yet; nothing already there is replaced or deleted. Unsaved Capture work isn't included.
 - If the browser won't let KRAK! save (for example a private window), a red notice says so at the top and saves only last until the tab closes.
 
-Until Drive sync arrives (Phase 2), everything is stored on the device it was made on. Export a backup now and then.
+Everything is stored in Chrome on this Chromebook. Export a backup now and then.
 
 ## Notes for development
 
