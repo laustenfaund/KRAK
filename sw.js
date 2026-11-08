@@ -1,6 +1,6 @@
 /* Offline support. App files: network first, so updates show up; cache as fallback. */
-const VERSION = "krak-v2";
-const SHELL = ["./", "./index.html", "./app.js", "./manifest.webmanifest",
+const VERSION = "krak-v3";
+const SHELL = ["./", "./index.html", "./panel.js", "./app.js", "./manifest.webmanifest",
   "./icons/icon-192.png", "./icons/icon-512.png", "./icons/favicon.svg"];
 self.addEventListener("install", e => { e.waitUntil(caches.open(VERSION).then(c => c.addAll(SHELL)).then(() => self.skipWaiting())); });
 self.addEventListener("activate", e => {

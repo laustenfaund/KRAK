@@ -162,6 +162,7 @@ function go(hash) { if (location.hash !== hash) location.hash = hash; else route
 function route() {
   const hsh = location.hash.slice(1);
   if (hsh.startsWith("p/")) { S.view = "project"; S.projectId = hsh.slice(2); }
+  else if (hsh.startsWith("k/")) { const [, pid, kid] = hsh.split("/"); S.view = "panel"; S.projectId = pid; S.panelId = kid; }
   else if (["capture", "inbox", "projects"].includes(hsh)) S.view = hsh;
   else S.view = isWide() ? "projects" : "capture";
   render();
@@ -169,16 +170,16 @@ function route() {
 window.addEventListener("hashchange", route);
 
 function renderNav() {
-  const cur = S.view === "project" ? "projects" : S.view;
+  const cur = S.view === "project" || S.view === "panel" ? "projects" : S.view;
   const tab = (id, label, extra) => h("button", { "aria-current": cur === id ? "page" : null, onclick: () => go("#" + id) }, label, extra);
   $("#nav").replaceChildren(
     tab("capture", "Capture"),
     tab("inbox", "Inbox", S.inbox.length ? h("span", { class: "badge" }, S.inbox.length) : null),
     tab("projects", "Projects"));
 }
-let capCleanup = null;
+let screenCleanup = null;
 function render() {
-  if (capCleanup) { capCleanup(); capCleanup = null; }
+  if (screenCleanup) { screenCleanup(); screenCleanup = null; }
   freeScreenUrls();
   renderNav();
   $("#topActions").replaceChildren();
@@ -186,6 +187,7 @@ function render() {
   if (S.view === "capture") main.replaceChildren(viewCapture());
   else if (S.view === "inbox") main.replaceChildren(viewInbox());
   else if (S.view === "project") main.replaceChildren(viewProject());
+  else if (S.view === "panel") main.replaceChildren(viewPanel());
   else main.replaceChildren(viewProjects());
   $("#topActions").append(h("button", { class: "btn ghost", onclick: backupDialog }, "Backup"));
   window.scrollTo(0, 0);
@@ -329,7 +331,7 @@ function viewCapture() {
 
   const onResize = () => fit();
   window.addEventListener("resize", onResize);
-  capCleanup = () => window.removeEventListener("resize", onResize);
+  screenCleanup = () => window.removeEventListener("resize", onResize);
   requestAnimationFrame(async () => {
     if (d.hasPhoto) photoImg = await blobImg(await DB.get("blobs", "draft-photo"));
     fit();
@@ -465,6 +467,7 @@ function viewProject() {
     h("button", { class: "btn ghost", onclick: () => projectDialog(p) }, "Settings"),
     h("button", { class: "btn ghost danger", onclick: async () => {
       if (!confirm(`Delete "${p.name}"? This can't be undone.`)) return;
+      for (const id of p.panels || []) await deletePanelData(id);
       S.projects = S.projects.filter(x => x.id !== p.id); await saveProjects(); go("#projects");
     } }, "Delete"));
   const soon = (title, what) => h("div", { class: "card", style: "cursor:default; padding:14px 16px" }, h("h3", null, title), h("p", { class: "small muted", style: "margin:6px 0 0" }, what));
@@ -472,7 +475,7 @@ function viewProject() {
     h("div", { class: "row" }, h("button", { class: "btn ghost small", onclick: () => go("#projects") }, "‹ Projects")),
     h("div", { class: "row", style: "gap:14px" }, shapeEl(p.size), h("div", null, h("h2", null, p.name), h("div", { class: "small muted" }, sizeLabel(p.size)))),
     soon("Beats", "The story as a list of beats. Coming in Phase 4."),
-    soon("Panels", "One panel per beat, with sketches and images. Coming in Phase 4."),
+    panelsSection(p),
     soon("Pages", "Panels arranged on pages, from grids or freeform shapes. Coming in Phase 5."));
 }
 
@@ -480,9 +483,14 @@ function viewProject() {
 /* One JSON file: projects, Inbox ideas, and their photos as data URLs. Thumbnails are rebuilt on import. */
 const blobToData = b => new Promise((res, rej) => { const r = new FileReader(); r.onload = () => res(r.result); r.onerror = () => rej(r.error); r.readAsDataURL(b); });
 async function exportBackup() {
-  const photos = {};
+  const photos = {}, panels = [], pictures = {};
   for (const it of S.inbox) if (it.hasPhoto) { const b = await DB.get("blobs", "photo:" + it.id); if (b) photos[it.id] = await blobToData(b); }
-  const data = { app: "krak", format: 1, exported: Date.now(), projects: S.projects, inbox: S.inbox, photos };
+  for (const p of S.projects) for (const id of p.panels || []) {
+    const pn = await loadPanel(id); if (!pn) continue;
+    panels.push(pn);
+    for (const l of pn.layers) for (const it of l.items) if (it.t === "img") { const b = await DB.get("blobs", "img:" + it.id); if (b) pictures[it.id] = await blobToData(b); }
+  }
+  const data = { app: "krak", format: 2, exported: Date.now(), projects: S.projects, inbox: S.inbox, photos, panels, pictures };
   const url = URL.createObjectURL(new Blob([JSON.stringify(data)], { type: "application/json" }));
   const a = h("a", { href: url, download: `krak-backup-${new Date().toISOString().slice(0, 10)}.json` });
   document.body.append(a); a.click(); a.remove();
@@ -495,12 +503,29 @@ function cleanProject(p) {
   if (!p || typeof p.id !== "string" || !p.size || !num(p.size.w, 1, 5000) || !num(p.size.h, 1, 5000)) return null;
   const s = p.size, preset = SIZES.some(x => x.preset === s.preset) ? s.preset : "custom";
   return { id: p.id, name: String(p.name || "Untitled comic").slice(0, 80), size: { preset, w: s.w, h: s.h, unit: s.unit === "px" ? "px" : "in" },
-    created: +p.created || Date.now(), updated: +p.updated || Date.now() };
+    created: +p.created || Date.now(), updated: +p.updated || Date.now(), panels: Array.isArray(p.panels) ? p.panels.filter(x => typeof x === "string") : [] };
+}
+const cleanStrokes = list => list.filter(st => st && typeof st.c === "string" && num(st.s, 0, 400) && Array.isArray(st.p))
+  .map(st => ({ c: st.c, s: st.s, e: st.e ? true : undefined, p: st.p.filter(q => Array.isArray(q) && q.length === 3 && q.every(n => typeof n === "number" && isFinite(n))) }));
+function cleanPanel(pn, projectId) {
+  if (!pn || typeof pn.id !== "string" || !num(pn.w, 1, 10000) || !num(pn.h, 1, 10000) || !Array.isArray(pn.layers) || !pn.layers.length) return null;
+  const layers = pn.layers.slice(0, MAX_LAYERS).filter(l => l && typeof l.id === "string" && Array.isArray(l.items)).map((l, i) => ({
+    id: l.id, name: String(l.name || "Layer " + (i + 1)).slice(0, 40), visible: l.visible !== false, opacity: num(l.opacity, 0, 1) ? l.opacity : 1, rough: !!l.rough,
+    items: l.items.flatMap(it => it && it.t === "img"
+      ? (typeof it.id === "string" && ["cx", "cy", "w", "h", "r"].every(k => num(it[k], -1e6, 1e6)) ? [{ t: "img", id: it.id, cx: it.cx, cy: it.cy, w: it.w, h: it.h, r: it.r }] : [])
+      : cleanStrokes([it]).map(st => ({ t: "s", ...st }))) }));
+  if (!layers.length) return null;
+  const ps = pn.persp || {}, mode = [0, 1, 2, 3].includes(ps.mode) ? ps.mode : 0;
+  const vps = Array.isArray(ps.vps) ? ps.vps.filter(v => Array.isArray(v) && num(v[0], -1e6, 1e6) && num(v[1], -1e6, 1e6)).slice(0, 3).map(v => [v[0], v[1]]) : [];
+  return { id: pn.id, projectId, name: String(pn.name || "Panel").slice(0, 60),
+    ratio: Array.isArray(pn.ratio) && num(pn.ratio[0], 0, 1e4) && num(pn.ratio[1], 0, 1e4) ? [pn.ratio[0], pn.ratio[1]] : [pn.w, pn.h], w: pn.w, h: pn.h,
+    created: +pn.created || Date.now(), updated: +pn.updated || Date.now(), layers,
+    active: layers.some(l => l.id === pn.active) ? pn.active : layers[layers.length - 1].id,
+    persp: { mode: vps.length >= mode ? mode : 0, hy: num(ps.hy, -1e6, 1e6) ? ps.hy : pn.h / 2, vps } };
 }
 function cleanItem(it) {
   if (!it || typeof it.id !== "string" || !num(it.w, 1, 20000) || !num(it.h, 1, 20000) || !Array.isArray(it.strokes)) return null;
-  const strokes = it.strokes.filter(st => st && typeof st.c === "string" && num(st.s, 0, 100) && Array.isArray(st.p))
-    .map(st => ({ c: st.c, s: st.s, e: st.e ? true : undefined, p: st.p.filter(q => Array.isArray(q) && q.length === 3 && q.every(n => typeof n === "number" && isFinite(n))) }));
+  const strokes = cleanStrokes(it.strokes);
   return { id: it.id, created: +it.created || Date.now(), updated: +it.updated || Date.now(), text: String(it.text || ""), w: it.w, h: it.h,
     strokes, hasSketch: strokes.length > 0, hasPhoto: false };
 }
@@ -512,7 +537,21 @@ async function importBackup(file) {
   const haveP = new Set(S.projects.map(p => p.id)), haveI = new Set(S.inbox.map(i => i.id));
   let np = 0, ni = 0;
   try {
-    for (const raw of data.projects) { const p = cleanProject(raw); if (p && !haveP.has(p.id)) { S.projects.push(p); haveP.add(p.id); np++; } }
+    const rawPanels = new Map((Array.isArray(data.panels) ? data.panels : []).filter(x => x && typeof x.id === "string").map(x => [x.id, x]));
+    const pics = data.pictures && typeof data.pictures === "object" ? data.pictures : {};
+    for (const raw of data.projects) {
+      const p = cleanProject(raw); if (!p || haveP.has(p.id)) continue;
+      const kept = [];
+      for (const id of p.panels) {
+        const pn = cleanPanel(rawPanels.get(id), p.id); if (!pn || await loadPanel(pn.id)) continue;
+        for (const l of pn.layers) for (const it of l.items) if (it.t === "img") {
+          const src = pics[it.id];
+          if (typeof src === "string" && src.startsWith("data:image/")) { try { await DB.put("blobs", "img:" + it.id, await (await fetch(src)).blob()); } catch (e) {} }
+        }
+        await savePanel(pn); kept.push(pn.id);
+      }
+      p.panels = kept; S.projects.push(p); haveP.add(p.id); np++;
+    }
     for (const raw of data.inbox) {
       const it = cleanItem(raw); if (!it || haveI.has(it.id)) continue;
       const src = data.photos && data.photos[it.id];

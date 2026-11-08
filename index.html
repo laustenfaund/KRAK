@@ -124,6 +124,32 @@ dialog::backdrop{background:rgba(10,8,6,.55)}
 .size b{display:block; font-size:14px}
 .size span{font-size:12px; color:var(--muted)}
 
+/* panel editor */
+.ped{display:flex; flex-direction:column; gap:8px; height:calc(100dvh - 176px); min-height:460px}
+.ptools{display:flex; flex-wrap:wrap; gap:6px; align-items:center}
+.ptools .sep{width:1px; height:24px; background:var(--line); margin-inline:2px}
+.inl{display:inline-flex; align-items:center; gap:6px; font-size:13px; color:var(--muted)}
+.inl input[type=range]{width:110px}
+.num{min-width:2.4em; font-variant-numeric:tabular-nums; color:var(--ink)}
+.pmain{flex:1; min-height:0; display:grid; grid-template-columns:minmax(0,1fr) 260px; gap:12px}
+.pstage{position:relative; min-height:0; background:var(--surface2); border-radius:8px; overflow:hidden}
+.pcv{position:absolute; inset:0; width:100%; height:100%; display:block; touch-action:none; outline:none}
+.players{display:flex; flex-direction:column; gap:6px; overflow:auto; min-height:0}
+.lrow{border:1px solid var(--line); border-radius:8px; background:var(--surface); padding:4px 6px}
+.lrow.on{border-color:var(--accent); background:var(--accent-soft)}
+.lrow .top{display:flex; align-items:center; gap:6px}
+.lrow .nm{flex:1; min-width:0; text-align:left; background:none; border:0; padding:6px 4px; cursor:pointer; font-weight:700; white-space:nowrap; overflow:hidden; text-overflow:ellipsis}
+.lrow .more{display:flex; flex-wrap:wrap; gap:6px; align-items:center; padding:4px 0 2px}
+.tag{font-size:11px; font-weight:700; padding:1px 7px; border-radius:9px; background:#DCEBF5; color:#1D4F6E}
+table.keys{border-collapse:collapse; font-size:14px}
+table.keys th{text-align:left; padding:4px 14px 4px 0; white-space:nowrap; font-weight:700}
+table.keys td{padding:4px 0; color:var(--muted)}
+@media (max-width:899px){
+  .ped{height:auto}
+  .pmain{grid-template-columns:1fr}
+  .pstage{height:65dvh}
+}
+
 .warn{margin-bottom:12px; padding:10px 12px; border:1px solid var(--danger); border-radius:8px; background:var(--accent-soft); font-size:14px}
 
 .toast{position:fixed; left:50%; bottom:84px; transform:translateX(-50%); background:var(--ink); color:var(--bg); padding:9px 16px; border-radius:20px; font-weight:600; z-index:50; pointer-events:none}
@@ -140,6 +166,7 @@ dialog::backdrop{background:rgba(10,8,6,.55)}
 </div>
 <nav class="nav" id="nav" aria-label="Sections"></nav>
 <dialog id="dlg"></dialog>
+<script src="panel.js"></script>
 <script src="app.js"></script>
 </body>
 </html>
